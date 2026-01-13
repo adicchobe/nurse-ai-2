@@ -1,6 +1,6 @@
 {
-  "name": "CareLingo 2.0",
-  "description": "A clinical standard medical roleplay simulation for nurses to master German in high-stakes healthcare environments.",
+  "name": "CareLingo Streamlit",
+  "description": "Clinical standard German medical simulation for nurses, deployed via Streamlit.",
   "requestFramePermissions": [
     "microphone"
   ]
