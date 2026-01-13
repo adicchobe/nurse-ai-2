@@ -8,32 +8,23 @@ interface RecorderProps {
 
 const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, disabled }) => {
   const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState('');
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
-    // Check for speech recognition support
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = 'de-DE'; // German for the user's input
+      recognitionRef.current.lang = 'de-DE';
 
       recognitionRef.current.onresult = (event: any) => {
         const result = event.results[0][0].transcript;
-        onRecordingComplete(result);
+        if (result) onRecordingComplete(result);
         setIsRecording(false);
       };
 
-      recognitionRef.current.onerror = (event: any) => {
-        console.error('Speech recognition error', event.error);
-        setIsRecording(false);
-      };
-
-      recognitionRef.current.onend = () => {
-        setIsRecording(false);
-      };
+      recognitionRef.current.onerror = () => setIsRecording(false);
+      recognitionRef.current.onend = () => setIsRecording(false);
     }
   }, [onRecordingComplete]);
 
@@ -41,35 +32,40 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, disabled }) =>
     if (isRecording) {
       recognitionRef.current?.stop();
     } else {
-      setTranscript('');
-      recognitionRef.current?.start();
-      setIsRecording(true);
+      try {
+        recognitionRef.current?.start();
+        setIsRecording(true);
+      } catch (e) {
+        console.error("Mic error", e);
+      }
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center w-full py-4">
-      <button
-        onClick={toggleRecording}
-        disabled={disabled}
-        className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all transform active:scale-95 ${
-          isRecording 
-            ? 'bg-rose-500 text-white recording-pulse' 
-            : 'bg-sky-500 text-white hover:bg-sky-600 shadow-lg'
-        } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-      >
-        {isRecording ? (
-          <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-            <rect x="6" y="6" width="12" height="12" rx="2" />
-          </svg>
-        ) : (
-          <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-          </svg>
+    <div className="flex flex-col items-center justify-center w-full py-6">
+      <div className="relative">
+        {isRecording && (
+          <div className="absolute inset-0 rounded-full border-4 border-rose-400 animate-[ping_1.5s_cubic-bezier(0,0,0.2,1)_infinite]" />
         )}
-      </button>
-      <span className="mt-3 text-sm font-semibold text-slate-500 animate-pulse">
+        <button
+          onClick={toggleRecording}
+          disabled={disabled}
+          className={`relative z-10 w-20 h-20 rounded-full flex items-center justify-center transition-all transform active:scale-95 shadow-xl ${
+            isRecording 
+              ? 'bg-rose-500 text-white' 
+              : 'bg-sky-500 text-white hover:bg-sky-600'
+          } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+        >
+          {isRecording ? (
+            <div className="w-8 h-8 bg-white rounded-sm" />
+          ) : (
+            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+          )}
+        </button>
+      </div>
+      <span className={`mt-4 text-xs font-bold uppercase tracking-widest transition-colors ${isRecording ? 'text-rose-500 animate-pulse' : 'text-slate-400'}`}>
         {isRecording ? 'Listening...' : 'Tap to Respond'}
       </span>
     </div>

@@ -27,7 +27,7 @@ export interface Feedback {
 export interface ChatMessage {
   role: 'nurse' | 'patient';
   text: string;
-  audio?: string; // base64
+  audio?: string; // base64 pcm
   feedback?: Feedback;
 }
 

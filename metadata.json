@@ -1,6 +1,6 @@
 {
-  "name": "CareLingo Streamlit",
-  "description": "Clinical standard German medical simulation for nurses, deployed via Streamlit.",
+  "name": "CareLingo - The Clinical Standard",
+  "description": "Medical language training simulation for nurses using Gemini 2.5.",
   "requestFramePermissions": [
     "microphone"
   ]

@@ -1,33 +1,32 @@
 
-import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { Feedback } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const SYSTEM_INSTRUCTION = `
-You are a dual-engine simulator for medical language training (German).
-Target User: Migrating nurses learning German.
+You are a dual-engine medical simulation brain for migrating nurses in Germany.
 
-Engine A (Patient): Respond to the user's input naturally as the patient specified in the scenario.
-CONSTRAINT: Max 20 words. No acting instructions or stage directions. Speak clearly and naturally.
+Engine A (Patient): 
+Act as the patient. Respond naturally to the user.
+CONSTRAINT: Max 20 words. Speak only German. No stage directions like *coughs*.
 
-Engine B (Grader): Analyze the User's input (ignore your own tone as the patient).
+Engine B (Grader): 
+Analyze the user's German medical communication.
 Evaluate:
 1. Grammar (1-10)
 2. Politeness (1-10)
 3. Medical Accuracy (1-10)
-4. Critique (Brief, actionable advice)
-5. Better Phrase (How a native professional would say it)
+4. Critique (Short, actionable advice in English)
+5. Better Phrase (Professional native-level German alternative)
 
-Output strictly as JSON:
+Output format must be STRICT JSON:
 {
-  "patient_reply": "String in German",
+  "patient_reply": "German response",
   "feedback": {
     "score_grammar": Number,
     "score_politeness": Number,
     "score_medical": Number,
-    "critique": "String in English",
-    "better_phrase": "String in German"
+    "critique": "English string",
+    "better_phrase": "German string"
   }
 }
 `;
@@ -38,16 +37,15 @@ export const processInteraction = async (
   userInput: string,
   history: { role: string; text: string }[]
 ): Promise<{ reply: string; feedback: Feedback }> => {
-  const contents = [
-    {
-      role: 'user',
-      parts: [{ text: `Scenario: ${scenarioTitle}. Patient: ${patientName}. User says: "${userInput}". History: ${JSON.stringify(history)}` }]
-    }
-  ];
-
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  // Use gemini-3-flash-preview for medical communication simulation and grading
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
-    contents,
+    contents: [{
+      role: 'user',
+      parts: [{ text: `Scenario: ${scenarioTitle}. Patient: ${patientName}. Nurse says: "${userInput}". Context: ${JSON.stringify(history.slice(-3))}` }]
+    }],
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       responseMimeType: "application/json",
@@ -72,31 +70,37 @@ export const processInteraction = async (
     }
   });
 
-  const data = JSON.parse(response.text || "{}");
-  return {
-    reply: data.patient_reply,
-    feedback: data.feedback
-  };
+  try {
+    const data = JSON.parse(response.text || "{}");
+    return {
+      reply: data.patient_reply,
+      feedback: data.feedback
+    };
+  } catch (e) {
+    console.error("Failed to parse Gemini response", e);
+    throw e;
+  }
 };
 
 export const generateSpeech = async (text: string): Promise<string> => {
-  // Clean text from markdown
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const cleanText = text.replace(/[*_\[\]()]/g, '');
   
+  // gemini-2.5-flash-preview-tts is recommended for text-to-speech tasks
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: cleanText }] }],
+    contents: [{ parts: [{ text: `Say clearly in German: ${cleanText}` }] }],
     config: {
-      responseModalities: ["AUDIO" as any],
+      responseModalities: [Modality.AUDIO],
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: 'Kore' } // Professional neutral voice
+          prebuiltVoiceConfig: { voiceName: 'Kore' }
         }
       }
     }
   });
 
   const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!base64Audio) throw new Error("No audio generated");
+  if (!base64Audio) throw new Error("Audio generation failed");
   return base64Audio;
 };
