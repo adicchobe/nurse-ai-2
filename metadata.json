@@ -1,0 +1,7 @@
+{
+  "name": "CareLingo 2.0",
+  "description": "A clinical standard medical roleplay simulation for nurses to master German in high-stakes healthcare environments.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
