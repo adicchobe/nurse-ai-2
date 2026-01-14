@@ -86,12 +86,11 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onStart, disab
     };
 
     recognition.onend = () => {
-      // Logic for auto-restart (to beat the 4s cutoff) vs final stop
       if (isIntentRecordingRef.current && timeLeftRef.current > 0) {
         try {
           recognition.start();
         } catch (e) {
-          console.warn("Recognition restart attempt ignored - already running");
+          console.warn("Recognition restart attempt ignored");
         }
       } else {
         handleFinalSubmission();
@@ -109,11 +108,9 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onStart, disab
 
   const toggleRecording = () => {
     if (isRecording) {
-      // Manual Stop
       isIntentRecordingRef.current = false;
       recognitionRef.current?.stop();
     } else {
-      // Start Session
       onStart?.();
       finalTranscriptRef.current = "";
       currentInterimRef.current = "";
@@ -125,7 +122,6 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onStart, disab
       setIsRecording(true);
       setIsProcessing(false);
 
-      // 1. Timer Interval for UI
       intervalRef.current = setInterval(() => {
         timeLeftRef.current -= 1;
         setTimeLeft(timeLeftRef.current);
@@ -136,7 +132,6 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onStart, disab
         }
       }, 1000);
 
-      // 2. Hard Safety Stop
       timerRef.current = setTimeout(() => {
         isIntentRecordingRef.current = false;
         recognitionRef.current?.stop();
@@ -159,18 +154,18 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onStart, disab
   }, [disabled]);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full py-6">
-      <div className="h-16 w-full max-w-xs mb-4 text-center px-4 flex flex-col items-center justify-center">
+    <div className="flex flex-col items-center justify-center w-full py-2">
+      <div className="h-10 w-full max-w-xs mb-2 text-center px-4 flex flex-col items-center justify-center">
         {isRecording && (
           <div className="animate-[fadeInUp_0.2s_ease-out]">
-            <div className="flex items-center justify-center gap-2 mb-2">
+            <div className="flex items-center justify-center gap-2">
               <span className="flex h-2 w-2 rounded-full bg-rose-500 animate-ping" />
-              <span className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em]">
-                Recording: {timeLeft}s Left
+              <span className="text-[9px] font-black text-rose-600 uppercase tracking-widest">
+                {timeLeft}s Remaining
               </span>
             </div>
-            <p className="text-sm font-medium text-slate-400 italic truncate max-w-[280px]">
-              {interimText || (finalTranscriptRef.current ? "..." : "Listening...")}
+            <p className="text-[11px] font-medium text-slate-400 italic truncate max-w-[240px]">
+              {interimText || "Listening..."}
             </p>
           </div>
         )}
@@ -178,14 +173,14 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onStart, disab
 
       <div className="relative">
         {(isRecording || isProcessing) && (
-          <div className={`absolute inset-[-8px] rounded-full border-2 ${
+          <div className={`absolute inset-[-4px] rounded-full border-2 ${
             isProcessing ? 'border-sky-200 animate-pulse' : 'border-rose-400 animate-[ping_2s_infinite]'
           }`} />
         )}
         <button
           onClick={toggleRecording}
           disabled={disabled || isProcessing}
-          className={`relative z-10 w-24 h-24 rounded-full flex items-center justify-center transition-all transform active:scale-90 shadow-2xl ${
+          className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center transition-all transform active:scale-90 shadow-xl ${
             isRecording 
               ? 'bg-rose-500 text-white' 
               : isProcessing 
@@ -194,24 +189,24 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onStart, disab
           } ${(disabled || isProcessing) && !isRecording ? 'opacity-40 cursor-not-allowed' : ''}`}
         >
           {isRecording ? (
-            <div className="w-8 h-8 bg-white rounded-lg shadow-inner" />
+            <div className="w-6 h-6 bg-white rounded shadow-inner" />
           ) : isProcessing ? (
-            <svg className="w-10 h-10 animate-spin" viewBox="0 0 24 24">
+            <svg className="w-8 h-8 animate-spin" viewBox="0 0 24 24">
               <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
               <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
           ) : (
-            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
           )}
         </button>
       </div>
       
-      <span className={`mt-6 text-[10px] font-black uppercase tracking-[0.3em] transition-colors ${
+      <span className={`mt-2 text-[9px] font-black uppercase tracking-[0.2em] transition-colors ${
         isRecording ? 'text-rose-600' : isProcessing ? 'text-slate-400' : 'text-slate-500'
       }`}>
-        {isRecording ? 'Tap to Submit' : isProcessing ? 'Clinical AI Working...' : 'Tap Mic to Respond'}
+        {isRecording ? 'Tap to Submit' : isProcessing ? 'Analyzing...' : 'Tap Mic to Respond'}
       </span>
     </div>
   );

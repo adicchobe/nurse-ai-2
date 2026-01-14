@@ -19,7 +19,6 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   
-  // Clinical Audio Engine Persistence
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
@@ -36,7 +35,7 @@ const App: React.FC = () => {
   };
 
   const startScenario = (scenario: Scenario) => {
-    initAudio(); // Initialize on dashboard selection
+    initAudio();
     setState({
       scenario,
       turns: 0,
@@ -89,7 +88,7 @@ const App: React.FC = () => {
 
   const playPcm = async (base64: string) => {
     try {
-      initAudio(); // Ensure context is ready
+      initAudio();
       const ctx = audioCtxRef.current!;
       
       const binary = atob(base64);
@@ -220,11 +219,11 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-6 space-y-6 pb-40">
+      <main className="flex-1 overflow-y-auto p-4 space-y-6 pb-32">
         {state.history.map((msg, idx) => (
           <div key={idx} className="space-y-4">
             <div className={`flex ${msg.role === 'nurse' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[85%] px-5 py-3.5 rounded-3xl animate-[fadeInUp_0.3s_ease-out] ${
+              <div className={`max-w-[85%] px-5 py-3 rounded-3xl animate-[fadeInUp_0.3s_ease-out] ${
                 msg.role === 'nurse' 
                   ? 'bg-sky-500 text-white rounded-tr-none shadow-lg shadow-sky-100' 
                   : 'bg-white text-slate-800 border-2 border-slate-100 rounded-tl-none'
@@ -248,12 +247,12 @@ const App: React.FC = () => {
         <div ref={chatEndRef} />
       </main>
 
-      <footer className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t-2 border-slate-100 p-8">
+      <footer className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t-2 border-slate-100 px-4 py-3">
         <div className="max-w-md mx-auto">
           {state.isEnding ? (
             <button 
               onClick={() => setScreen(Screen.REPORT)}
-              className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 shadow-xl"
+              className="w-full h-14 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 shadow-xl"
             >
               Sign Clinical Report
             </button>
