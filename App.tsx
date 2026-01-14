@@ -27,14 +27,14 @@ const App: React.FC = () => {
     setState({
       scenario,
       turns: 0,
-      history: [{ role: 'patient', text: `Guten Tag. Ich bin ${scenario.patientName}.` }],
+      history: [{ role: 'patient', text: `Guten Tag. Ich bin ${scenario.patientName}. Wie kann ich Ihnen heute helfen?` }],
       isEnding: false
     });
     setScreen(Screen.SIMULATION);
   };
 
   const handleUserResponse = async (text: string) => {
-    if (!state.scenario || state.turns >= MAX_TURNS) return;
+    if (!state.scenario || state.turns >= MAX_TURNS || isLoading) return;
 
     setIsLoading(true);
     setError(null);
@@ -67,7 +67,8 @@ const App: React.FC = () => {
 
       await playPcm(audioBase64);
     } catch (err) {
-      setError("System connection interrupted. Please try again.");
+      setError("Clinical systems busy. Please repeat your instruction.");
+      console.error(err);
     } finally {
       setIsLoading(false);
     }
@@ -77,19 +78,20 @@ const App: React.FC = () => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       const binary = atob(base64);
-      const len = binary.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      
       const dataInt16 = new Int16Array(bytes.buffer);
       const buffer = audioCtx.createBuffer(1, dataInt16.length, 24000);
       const channelData = buffer.getChannelData(0);
       for (let i = 0; i < dataInt16.length; i++) channelData[i] = dataInt16[i] / 32768.0;
+      
       const source = audioCtx.createBufferSource();
       source.buffer = buffer;
       source.connect(audioCtx.destination);
       source.start();
     } catch (e) {
-      console.error("Audio error", e);
+      console.warn("Audio playback context requires user interaction first", e);
     }
   };
 
@@ -101,19 +103,19 @@ const App: React.FC = () => {
             <span className="text-4xl">🏥</span>
           </div>
           <div className="space-y-2">
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">CareLingo</h1>
-            <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">The Clinical Standard v2.0</p>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight italic">CareLingo</h1>
+            <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Medical Language Engine v2.0</p>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); setScreen(Screen.DASHBOARD); }} className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 space-y-4">
             <input 
               type="password" 
-              placeholder="Shift ID / Passcode" 
+              placeholder="Shift Passcode" 
               className="w-full h-14 px-6 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-sky-100 outline-none transition-all font-bold text-center"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            <button className="w-full h-14 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-800 hover:-translate-y-1 transition-all active:scale-95 shadow-lg">
-              Start Shift
+            <button className="w-full h-14 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-800 transition-all shadow-lg">
+              Check-In
             </button>
           </form>
         </div>
@@ -123,38 +125,29 @@ const App: React.FC = () => {
 
   if (screen === Screen.DASHBOARD) {
     return (
-      <div className="min-h-screen bg-slate-50 p-6 max-w-2xl mx-auto flex flex-col">
-        <header className="py-8 flex items-center justify-between">
+      <div className="min-h-screen bg-slate-50 p-6 max-w-2xl mx-auto">
+        <header className="py-8 flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-black text-slate-900">Patient Board</h2>
-            <p className="text-slate-400 text-sm font-medium">Ready for your simulation rounds?</p>
+            <h2 className="text-2xl font-black text-slate-900">Shift Assignments</h2>
+            <p className="text-slate-400 text-sm font-medium">Select a patient for simulation</p>
           </div>
-          <div className="w-12 h-12 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center">🩺</div>
+          <div className="w-12 h-12 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center">🏥</div>
         </header>
 
-        <div className="space-y-4">
+        <div className="grid gap-4">
           {SCENARIOS.map((scenario) => (
             <button 
               key={scenario.id} 
               onClick={() => startScenario(scenario)}
-              className="w-full group bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm hover:border-sky-500 hover:shadow-xl hover:shadow-sky-100 hover:-translate-y-1 transition-all text-left flex items-start gap-6 relative overflow-hidden"
+              className="w-full group bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm hover:border-sky-500 hover:shadow-xl hover:shadow-sky-100 transition-all text-left flex items-start gap-6 relative"
             >
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-100 transition-opacity">
-                <span className="text-5xl">{scenario.icon}</span>
-              </div>
-              <div className="relative z-10 space-y-2">
+              <div className="text-4xl">{scenario.icon}</div>
+              <div className="space-y-1">
                 <div className="flex items-center gap-3">
-                  <span className={`text-[10px] uppercase font-black px-2.5 py-1 rounded-full border ${
-                    scenario.difficulty === 'Easy' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                    scenario.difficulty === 'Medium' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                    'bg-rose-50 text-rose-600 border-rose-100'
-                  }`}>
-                    {scenario.difficulty}
-                  </span>
-                  <h3 className="text-lg font-black text-slate-800">{scenario.title}</h3>
+                   <h3 className="text-lg font-black text-slate-800">{scenario.patientName}</h3>
+                   <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">{scenario.difficulty}</span>
                 </div>
-                <p className="text-slate-900 font-bold">{scenario.patientName}</p>
-                <p className="text-slate-500 text-sm leading-relaxed max-w-[80%] italic">"{scenario.hook}"</p>
+                <p className="text-slate-500 text-sm font-medium italic">"{scenario.hook}"</p>
               </div>
             </button>
           ))}
@@ -164,7 +157,6 @@ const App: React.FC = () => {
   }
 
   if (screen === Screen.REPORT) {
-    // Correctly reference Feedback type for scoring calculations
     const scores = state.history.filter(m => !!m.feedback).map(m => m.feedback!);
     const avg = (key: keyof Feedback) => scores.length ? (scores.reduce((a, b) => a + (b[key] as number), 0) / scores.length).toFixed(1) : "0";
 
@@ -172,34 +164,24 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
         <div className="w-full max-w-md bg-white rounded-[2.5rem] p-10 shadow-2xl border border-slate-100 text-center space-y-8">
           <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-3xl flex items-center justify-center text-4xl mx-auto shadow-inner">🏆</div>
-          <div className="space-y-2">
-            <h2 className="text-3xl font-black text-slate-900">Shift Complete</h2>
-            <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">End-of-Shift Analytics</p>
-          </div>
-
-          <div className="space-y-4">
+          <h2 className="text-3xl font-black text-slate-900">Evaluation Ready</h2>
+          <div className="grid grid-cols-3 gap-2">
             {[
-              { label: 'Grammar', score: avg('score_grammar'), color: 'bg-sky-500' },
-              { label: 'Politeness', score: avg('score_politeness'), color: 'bg-emerald-500' },
-              { label: 'Clinical Accuracy', score: avg('score_medical'), color: 'bg-rose-500' }
-            ].map((s) => (
-              <div key={s.label} className="space-y-1">
-                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  <span>{s.label}</span>
-                  <span>{s.score}/10</span>
-                </div>
-                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div className={`h-full ${s.color} transition-all duration-1000`} style={{ width: `${Number(s.score) * 10}%` }} />
-                </div>
+              { label: 'Grammar', val: avg('score_grammar') },
+              { label: 'Politeness', val: avg('score_politeness') },
+              { label: 'Medical', val: avg('score_medical') }
+            ].map(s => (
+              <div key={s.label} className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div className="text-lg font-black text-slate-800">{s.val}</div>
+                <div className="text-[9px] font-bold text-slate-400 uppercase">{s.label}</div>
               </div>
             ))}
           </div>
-
           <button 
             onClick={() => setScreen(Screen.DASHBOARD)}
-            className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-800 transition-all shadow-xl active:scale-95"
+            className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-800 transition-all"
           >
-            Finalize & Logout
+            Acknowledge & Back
           </button>
         </div>
       </div>
@@ -207,82 +189,61 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="h-screen bg-slate-50 flex flex-col overflow-hidden font-['Inter']">
-      <header className="bg-white border-b-2 border-slate-100 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+    <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
+      <header className="bg-white border-b-2 border-slate-100 px-6 py-4 flex items-center justify-between shadow-sm z-50">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-2xl shadow-inner border border-slate-100">
-            {state.scenario?.icon}
-          </div>
+          <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-xl shadow-inner">{state.scenario?.icon}</div>
           <div>
             <h3 className="font-black text-slate-900 leading-none">{state.scenario?.patientName}</h3>
-            <p className="text-[10px] text-sky-500 uppercase font-black tracking-widest mt-1.5 flex items-center gap-1">
-              <span className="w-1 h-1 bg-sky-500 rounded-full animate-pulse" />
-              {state.scenario?.goal}
-            </p>
+            <p className="text-[9px] text-sky-500 uppercase font-black tracking-widest mt-1.5">{state.scenario?.goal}</p>
           </div>
         </div>
-        <div className="flex flex-col items-end">
-          <div className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1.5">Shift Progress</div>
-          <div className="flex gap-1.5">
-            {[...Array(MAX_TURNS)].map((_, i) => (
-              <div 
-                key={i} 
-                className={`w-4 h-1.5 rounded-full transition-all duration-500 ${i < state.turns ? 'bg-sky-500 shadow-sm shadow-sky-200' : 'bg-slate-200'}`} 
-              />
-            ))}
-          </div>
+        <div className="flex gap-1.5">
+          {[...Array(MAX_TURNS)].map((_, i) => (
+            <div key={i} className={`w-3 h-1.5 rounded-full transition-all duration-500 ${i < state.turns ? 'bg-sky-500' : 'bg-slate-200'}`} />
+          ))}
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-6 space-y-8 pb-32">
+      <main className="flex-1 overflow-y-auto p-6 space-y-6 pb-40">
         {state.history.map((msg, idx) => (
-          <div key={idx} className="space-y-6">
-            <div className={`flex ${msg.role === 'nurse' ? 'justify-end' : 'justify-start'} group`}>
-              <div className={`max-w-[85%] px-5 py-4 rounded-[1.75rem] shadow-sm border-2 animate-[fadeInUp_0.4s_ease-out] ${
+          <div key={idx} className="space-y-4">
+            <div className={`flex ${msg.role === 'nurse' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[85%] px-5 py-3.5 rounded-3xl animate-[fadeInUp_0.3s_ease-out] ${
                 msg.role === 'nurse' 
-                  ? 'bg-sky-500 text-white border-sky-400 rounded-tr-none' 
-                  : 'bg-white text-slate-800 border-slate-100 rounded-tl-none'
+                  ? 'bg-sky-500 text-white rounded-tr-none shadow-lg shadow-sky-100' 
+                  : 'bg-white text-slate-800 border-2 border-slate-100 rounded-tl-none'
               }`}>
-                <p className="text-sm font-bold leading-relaxed">{msg.text}</p>
+                <p className="text-sm font-bold">{msg.text}</p>
               </div>
             </div>
             {msg.feedback && <FeedbackCard feedback={msg.feedback} />}
           </div>
         ))}
         {isLoading && (
-          <div className="flex justify-start animate-pulse">
-            <div className="bg-white border-2 border-slate-100 px-5 py-4 rounded-3xl rounded-tl-none flex gap-1">
-              <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          <div className="flex justify-start">
+            <div className="bg-white border-2 border-slate-100 px-5 py-4 rounded-3xl rounded-tl-none flex gap-1 animate-pulse">
+              <div className="w-1.5 h-1.5 bg-slate-300 rounded-full" />
+              <div className="w-1.5 h-1.5 bg-slate-300 rounded-full" />
+              <div className="w-1.5 h-1.5 bg-slate-300 rounded-full" />
             </div>
           </div>
         )}
-        {error && (
-          <div className="bg-rose-50 text-rose-500 text-[10px] font-black uppercase text-center py-2 px-4 rounded-full border border-rose-100">
-            ⚠️ {error}
-          </div>
-        )}
+        {error && <div className="text-center text-rose-500 text-xs font-bold uppercase">{error}</div>}
         <div ref={chatEndRef} />
       </main>
 
-      <footer className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t-2 border-slate-100 p-6 z-50">
+      <footer className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t-2 border-slate-100 p-8">
         <div className="max-w-md mx-auto">
           {state.isEnding ? (
             <button 
               onClick={() => setScreen(Screen.REPORT)}
-              className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-800 transition-all flex items-center justify-center gap-3 shadow-2xl active:scale-95"
+              className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 shadow-xl"
             >
-              Prepare Clinical Report
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-              </svg>
+              Sign Clinical Report
             </button>
           ) : (
-            <Recorder 
-              onRecordingComplete={handleUserResponse} 
-              disabled={isLoading}
-            />
+            <Recorder onRecordingComplete={handleUserResponse} disabled={isLoading} />
           )}
         </div>
       </footer>
