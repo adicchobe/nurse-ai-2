@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 interface RecorderProps {
   onRecordingComplete: (text: string) => void;
@@ -17,30 +17,33 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onStart, disab
   
   const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef<string>("");
-  const isIntentRecording = useRef<boolean>(false);
-  // Fix: Replaced NodeJS.Timeout with any for browser environment compatibility
+  const currentInterimRef = useRef<string>("");
+  const isIntentRecordingRef = useRef<boolean>(false);
+  const timeLeftRef = useRef<number>(MAX_RECORDING_SECONDS);
+  
   const timerRef = useRef<any>(null);
-  // Fix: Replaced NodeJS.Timeout with any for browser environment compatibility
-  const countdownIntervalRef = useRef<any>(null);
+  const intervalRef = useRef<any>(null);
 
-  const stopAllTimers = () => {
+  const cleanup = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    if (intervalRef.current) clearInterval(intervalRef.current);
     timerRef.current = null;
-    countdownIntervalRef.current = null;
-  };
+    intervalRef.current = null;
+  }, []);
 
-  const forceStopRecording = () => {
-    isIntentRecording.current = false;
-    stopAllTimers();
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {
-        console.error("Error stopping recognition:", e);
-      }
+  const handleFinalSubmission = useCallback(() => {
+    const result = (finalTranscriptRef.current + " " + currentInterimRef.current).trim();
+    setIsRecording(false);
+    setInterimText("");
+    cleanup();
+
+    if (result) {
+      onRecordingComplete(result);
+      setIsProcessing(true);
+    } else {
+      setIsProcessing(false);
     }
-  };
+  }, [onRecordingComplete, cleanup]);
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -52,107 +55,101 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onStart, disab
     recognition.lang = 'de-DE';
 
     recognition.onstart = () => {
-      console.log("Speech engine active");
-      setIsProcessing(false);
+      console.log("Recognition session started");
     };
 
     recognition.onresult = (event: any) => {
-      let currentInterim = "";
-      let newFinal = "";
+      let interim = "";
+      let final = "";
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          newFinal += transcript + " ";
+          final += transcript + " ";
         } else {
-          currentInterim += transcript;
+          interim += transcript;
         }
       }
 
-      if (newFinal) {
-        finalTranscriptRef.current += newFinal;
-      }
-      setInterimText(currentInterim);
+      if (final) finalTranscriptRef.current += final;
+      currentInterimRef.current = interim;
+      setInterimText(interim);
     };
 
     recognition.onerror = (event: any) => {
-      console.error("Speech Recognition Error:", event.error);
-      if (event.error === 'network' || event.error === 'not-allowed') {
-        isIntentRecording.current = false;
+      console.error("Speech Error:", event.error);
+      if (event.error !== 'no-speech') {
+        isIntentRecordingRef.current = false;
         setIsRecording(false);
-        stopAllTimers();
+        cleanup();
       }
     };
 
     recognition.onend = () => {
-      // If user still wants to record AND we haven't hit the 10s limit, restart
-      if (isIntentRecording.current && timeLeft > 0) {
-        console.log("Engine paused, restarting to reach intent...");
+      // Logic for auto-restart (to beat the 4s cutoff) vs final stop
+      if (isIntentRecordingRef.current && timeLeftRef.current > 0) {
         try {
           recognition.start();
         } catch (e) {
-          console.error("Restart failed:", e);
-          setIsRecording(false);
-          isIntentRecording.current = false;
+          console.warn("Recognition restart attempt ignored - already running");
         }
       } else {
-        // User manually stopped or 10s limit reached
-        const totalResult = (finalTranscriptRef.current + " " + interimText).trim();
-        setIsRecording(false);
-        setInterimText("");
-        stopAllTimers();
-        
-        if (totalResult) {
-          onRecordingComplete(totalResult);
-          setIsProcessing(true);
-        } else {
-          setIsProcessing(false);
-        }
+        handleFinalSubmission();
       }
     };
 
     recognitionRef.current = recognition;
 
     return () => {
-      forceStopRecording();
+      isIntentRecordingRef.current = false;
+      recognition.abort();
+      cleanup();
     };
-  }, [onRecordingComplete, interimText, timeLeft]);
+  }, [handleFinalSubmission, cleanup]);
 
   const toggleRecording = () => {
     if (isRecording) {
-      forceStopRecording();
+      // Manual Stop
+      isIntentRecordingRef.current = false;
+      recognitionRef.current?.stop();
     } else {
-      // Reset and Start
+      // Start Session
       onStart?.();
       finalTranscriptRef.current = "";
+      currentInterimRef.current = "";
       setInterimText("");
       setTimeLeft(MAX_RECORDING_SECONDS);
-      isIntentRecording.current = true;
+      timeLeftRef.current = MAX_RECORDING_SECONDS;
+      
+      isIntentRecordingRef.current = true;
       setIsRecording(true);
+      setIsProcessing(false);
 
-      // Start Countdown
-      countdownIntervalRef.current = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            forceStopRecording();
-            return 0;
-          }
-          return prev - 1;
-        });
+      // 1. Timer Interval for UI
+      intervalRef.current = setInterval(() => {
+        timeLeftRef.current -= 1;
+        setTimeLeft(timeLeftRef.current);
+        if (timeLeftRef.current <= 0) {
+          isIntentRecordingRef.current = false;
+          recognitionRef.current?.stop();
+          cleanup();
+        }
       }, 1000);
 
-      // Hard Limit Safety Timeout
+      // 2. Hard Safety Stop
       timerRef.current = setTimeout(() => {
-        forceStopRecording();
+        isIntentRecordingRef.current = false;
+        recognitionRef.current?.stop();
+        cleanup();
       }, MAX_RECORDING_SECONDS * 1000);
 
       try {
         recognitionRef.current?.start();
       } catch (e) {
-        console.error("Start error:", e);
+        console.error("Mic start failed:", e);
         setIsRecording(false);
-        isIntentRecording.current = false;
-        stopAllTimers();
+        isIntentRecordingRef.current = false;
+        cleanup();
       }
     }
   };
@@ -163,59 +160,58 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onStart, disab
 
   return (
     <div className="flex flex-col items-center justify-center w-full py-6">
-      {/* Live Preview & Safety Timer */}
-      <div className="h-14 w-full max-w-xs mb-4 text-center px-4 flex flex-col items-center justify-center">
+      <div className="h-16 w-full max-w-xs mb-4 text-center px-4 flex flex-col items-center justify-center">
         {isRecording && (
-          <>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-              <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">
-                Auto-Stop in {timeLeft}s
+          <div className="animate-[fadeInUp_0.2s_ease-out]">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <span className="flex h-2 w-2 rounded-full bg-rose-500 animate-ping" />
+              <span className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em]">
+                Recording: {timeLeft}s Left
               </span>
             </div>
-            <p className="text-xs font-medium text-slate-500 italic interim-text">
-              {interimText || (finalTranscriptRef.current ? "..." : "Speaking...")}
+            <p className="text-sm font-medium text-slate-400 italic truncate max-w-[280px]">
+              {interimText || (finalTranscriptRef.current ? "..." : "Listening...")}
             </p>
-          </>
+          </div>
         )}
       </div>
 
       <div className="relative">
         {(isRecording || isProcessing) && (
-          <div className={`absolute inset-0 rounded-full border-4 ${
-            isProcessing ? 'border-sky-200 animate-pulse' : 'border-rose-400 animate-[ping_1.5s_cubic-bezier(0,0,0.2,1)_infinite]'
+          <div className={`absolute inset-[-8px] rounded-full border-2 ${
+            isProcessing ? 'border-sky-200 animate-pulse' : 'border-rose-400 animate-[ping_2s_infinite]'
           }`} />
         )}
         <button
           onClick={toggleRecording}
           disabled={disabled || isProcessing}
-          className={`relative z-10 w-20 h-20 rounded-full flex items-center justify-center transition-all transform active:scale-95 shadow-xl ${
+          className={`relative z-10 w-24 h-24 rounded-full flex items-center justify-center transition-all transform active:scale-90 shadow-2xl ${
             isRecording 
-              ? 'bg-rose-500 text-white shadow-rose-200' 
+              ? 'bg-rose-500 text-white' 
               : isProcessing 
-                ? 'bg-slate-200 text-slate-400'
-                : 'bg-sky-500 text-white hover:bg-sky-600 shadow-sky-200'
+                ? 'bg-slate-100 text-slate-300'
+                : 'bg-sky-500 text-white hover:bg-sky-600'
           } ${(disabled || isProcessing) && !isRecording ? 'opacity-40 cursor-not-allowed' : ''}`}
         >
           {isRecording ? (
-            <div className="w-8 h-8 bg-white rounded-sm shadow-inner" />
+            <div className="w-8 h-8 bg-white rounded-lg shadow-inner" />
           ) : isProcessing ? (
-            <svg className="w-8 h-8 animate-spin" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            <svg className="w-10 h-10 animate-spin" viewBox="0 0 24 24">
+              <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
           ) : (
-            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
           )}
         </button>
       </div>
       
-      <span className={`mt-4 text-[10px] font-black uppercase tracking-[0.2em] transition-colors ${
-        isRecording ? 'text-rose-600' : isProcessing ? 'text-slate-400' : 'text-slate-400'
+      <span className={`mt-6 text-[10px] font-black uppercase tracking-[0.3em] transition-colors ${
+        isRecording ? 'text-rose-600' : isProcessing ? 'text-slate-400' : 'text-slate-500'
       }`}>
-        {isRecording ? 'Tap to Submit Now' : isProcessing ? 'Clinical Processing...' : 'Tap to Respond'}
+        {isRecording ? 'Tap to Submit' : isProcessing ? 'Clinical AI Working...' : 'Tap Mic to Respond'}
       </span>
     </div>
   );
