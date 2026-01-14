@@ -37,9 +37,9 @@ export const processInteraction = async (
   userInput: string,
   history: { role: string; text: string }[]
 ): Promise<{ reply: string; feedback: Feedback }> => {
+  // Initialize inside the function to ensure the latest API key is used from environment variables
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // Use gemini-3-flash-preview for medical communication simulation and grading
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: [{
@@ -86,7 +86,6 @@ export const generateSpeech = async (text: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const cleanText = text.replace(/[*_\[\]()]/g, '');
   
-  // gemini-2.5-flash-preview-tts is recommended for text-to-speech tasks
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
     contents: [{ parts: [{ text: `Say clearly in German: ${cleanText}` }] }],
