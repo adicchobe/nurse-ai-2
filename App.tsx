@@ -18,12 +18,25 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  
+  // Clinical Audio Engine Persistence
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [state.history, isLoading]);
 
+  const initAudio = () => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume();
+    }
+  };
+
   const startScenario = (scenario: Scenario) => {
+    initAudio(); // Initialize on dashboard selection
     setState({
       scenario,
       turns: 0,
@@ -76,22 +89,24 @@ const App: React.FC = () => {
 
   const playPcm = async (base64: string) => {
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      initAudio(); // Ensure context is ready
+      const ctx = audioCtxRef.current!;
+      
       const binary = atob(base64);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       
       const dataInt16 = new Int16Array(bytes.buffer);
-      const buffer = audioCtx.createBuffer(1, dataInt16.length, 24000);
+      const buffer = ctx.createBuffer(1, dataInt16.length, 24000);
       const channelData = buffer.getChannelData(0);
       for (let i = 0; i < dataInt16.length; i++) channelData[i] = dataInt16[i] / 32768.0;
       
-      const source = audioCtx.createBufferSource();
+      const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(audioCtx.destination);
+      source.connect(ctx.destination);
       source.start();
     } catch (e) {
-      console.warn("Audio playback context requires user interaction first", e);
+      console.warn("Audio playback failed:", e);
     }
   };
 
@@ -243,7 +258,7 @@ const App: React.FC = () => {
               Sign Clinical Report
             </button>
           ) : (
-            <Recorder onRecordingComplete={handleUserResponse} disabled={isLoading} />
+            <Recorder onRecordingComplete={handleUserResponse} onStart={initAudio} disabled={isLoading} />
           )}
         </div>
       </footer>
