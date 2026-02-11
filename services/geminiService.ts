@@ -3,32 +3,46 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { Feedback } from "../types";
 
 const SYSTEM_INSTRUCTION = `
-You are a dual-engine medical simulation brain for migrating nurses in Germany.
+<model_config>
+  <role>Voice-First Clinical AI (Nurse Simulator)</role>
+  <model_type>Gemini 3 Flash</model_type>
+  <latency_mode>Ultra-Low</latency_mode>
+</model_config>
 
-Engine A (Patient): 
-Act as the patient. Respond naturally to the user.
-CONSTRAINT: Max 20 words. Speak only German. No stage directions like *coughs*.
+<critical_directives>
+  1. ZERO LATENCY: Output the JSON immediately. Do not generate pre-amble text.
+  2. LANGUAGE LOCK:
+     - User English -> You English.
+     - User German -> You German.
+     - User Hindi-English -> You English.
+  3. VOICE SCRIPT:
+     - Max 15 words if possible.
+     - No lists. No markdown. No "I hope you are well."
+     - Get straight to the clinical point.
+</critical_directives>
 
-Engine B (Grader): 
-Analyze the user's German medical communication.
-Evaluate:
-1. Grammar (1-10)
-2. Politeness (1-10)
-3. Medical Accuracy (1-10)
-4. Critique (Short, actionable advice in English)
-5. Better Phrase (Professional native-level German alternative)
+<knowledge_base_dialect>
+  <term input="Loose motions" output_sbar="Gastroenteritis" />
+  <term input="Giddy" output_sbar="Vertigo" />
+  <term input="Prepone" output_sbar="Reschedule Early" />
+  <term input="Gas trouble" output_sbar="Dyspepsia" />
+  <term input="Vomiting sensation" output_sbar="Nausea" />
+  <term input="Peaky" output_sbar="Malaise" />
+  <term input="A&E" output_sbar="ED" />
+  <term input="Surgical spirit" output_sbar="Rubbing Alcohol" />
+</knowledge_base_dialect>
 
-Output format must be STRICT JSON:
-{
-  "patient_reply": "German response",
-  "feedback": {
-    "score_grammar": Number,
-    "score_politeness": Number,
-    "score_medical": Number,
-    "critique": "English string",
-    "better_phrase": "German string"
+<output_schema>
+  Return ONLY a single JSON object:
+  {
+    "meta": { "lang": "en-US" | "en-IN" | "de", "urgency": "Low" | "High" },
+    "sbar": { 
+      "S": "Situation", 
+      "A": "Assessment (Standardized Terms)" 
+    },
+    "speech_script": "Short, natural, spoken text string mirroring user language."
   }
-}
+</output_schema>
 `;
 
 export const processInteraction = async (
@@ -37,14 +51,13 @@ export const processInteraction = async (
   userInput: string,
   history: { role: string; text: string }[]
 ): Promise<{ reply: string; feedback: Feedback }> => {
-  // Initialize inside the function to ensure the latest API key is used from environment variables
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: [{
       role: 'user',
-      parts: [{ text: `Scenario: ${scenarioTitle}. Patient: ${patientName}. Nurse says: "${userInput}". Context: ${JSON.stringify(history.slice(-3))}` }]
+      parts: [{ text: `Nurse input: "${userInput}". Current Scenario: ${scenarioTitle}. History: ${JSON.stringify(history.slice(-2))}` }]
     }],
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -52,20 +65,25 @@ export const processInteraction = async (
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          patient_reply: { type: Type.STRING },
-          feedback: {
+          meta: {
             type: Type.OBJECT,
             properties: {
-              score_grammar: { type: Type.NUMBER },
-              score_politeness: { type: Type.NUMBER },
-              score_medical: { type: Type.NUMBER },
-              critique: { type: Type.STRING },
-              better_phrase: { type: Type.STRING }
+              lang: { type: Type.STRING },
+              urgency: { type: Type.STRING }
             },
-            required: ["score_grammar", "score_politeness", "score_medical", "critique", "better_phrase"]
-          }
+            required: ["lang", "urgency"]
+          },
+          sbar: {
+            type: Type.OBJECT,
+            properties: {
+              S: { type: Type.STRING },
+              A: { type: Type.STRING }
+            },
+            required: ["S", "A"]
+          },
+          speech_script: { type: Type.STRING }
         },
-        required: ["patient_reply", "feedback"]
+        required: ["meta", "sbar", "speech_script"]
       }
     }
   });
@@ -73,8 +91,13 @@ export const processInteraction = async (
   try {
     const data = JSON.parse(response.text || "{}");
     return {
-      reply: data.patient_reply,
-      feedback: data.feedback
+      reply: data.speech_script,
+      feedback: {
+        lang: data.meta.lang,
+        urgency: data.meta.urgency as 'Low' | 'High',
+        situation: data.sbar.S,
+        assessment: data.sbar.A
+      }
     };
   } catch (e) {
     console.error("Failed to parse Gemini response", e);
@@ -84,11 +107,12 @@ export const processInteraction = async (
 
 export const generateSpeech = async (text: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // We no longer prefix with "Say in German" to allow for language mirroring
   const cleanText = text.replace(/[*_\[\]()]/g, '');
   
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: `Say clearly in German: ${cleanText}` }] }],
+    contents: [{ parts: [{ text: cleanText }] }],
     config: {
       responseModalities: [Modality.AUDIO],
       speechConfig: {

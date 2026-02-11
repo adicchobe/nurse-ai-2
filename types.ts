@@ -17,11 +17,10 @@ export interface Scenario {
 }
 
 export interface Feedback {
-  score_grammar: number;
-  score_politeness: number;
-  score_medical: number;
-  critique: string;
-  better_phrase: string;
+  lang: string;
+  urgency: 'Low' | 'High';
+  situation: string;
+  assessment: string;
 }
 
 export interface ChatMessage {

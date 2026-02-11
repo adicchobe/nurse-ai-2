@@ -118,7 +118,7 @@ const App: React.FC = () => {
           </div>
           <div className="space-y-2">
             <h1 className="text-4xl font-black text-slate-900 tracking-tight italic">CareLingo</h1>
-            <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Medical Language Engine v2.0</p>
+            <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Clinical Language Standard v2.0</p>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); setScreen(Screen.DASHBOARD); }} className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 space-y-4">
             <input 
@@ -143,7 +143,7 @@ const App: React.FC = () => {
         <header className="py-8 flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-black text-slate-900">Shift Assignments</h2>
-            <p className="text-slate-400 text-sm font-medium">Select a patient for simulation</p>
+            <p className="text-slate-400 text-sm font-medium">Select a patient for clinical simulation</p>
           </div>
           <div className="w-12 h-12 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center">🏥</div>
         </header>
@@ -171,19 +171,18 @@ const App: React.FC = () => {
   }
 
   if (screen === Screen.REPORT) {
-    const scores = state.history.filter(m => !!m.feedback).map(m => m.feedback!);
-    const avg = (key: keyof Feedback) => scores.length ? (scores.reduce((a, b) => a + (b[key] as number), 0) / scores.length).toFixed(1) : "0";
+    const totalTurns = state.history.filter(m => m.role === 'nurse').length;
+    const highUrgencyCount = state.history.filter(m => m.feedback?.urgency === 'High').length;
 
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
         <div className="w-full max-w-md bg-white rounded-[2.5rem] p-10 shadow-2xl border border-slate-100 text-center space-y-8">
-          <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-3xl flex items-center justify-center text-4xl mx-auto shadow-inner">🏆</div>
-          <h2 className="text-3xl font-black text-slate-900">Evaluation Ready</h2>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-3xl flex items-center justify-center text-4xl mx-auto shadow-inner">📄</div>
+          <h2 className="text-3xl font-black text-slate-900">Clinical Handover Done</h2>
+          <div className="grid grid-cols-2 gap-2">
             {[
-              { label: 'Grammar', val: avg('score_grammar') },
-              { label: 'Politeness', val: avg('score_politeness') },
-              { label: 'Medical', val: avg('score_medical') }
+              { label: 'SBAR Interactions', val: totalTurns },
+              { label: 'Critical Events', val: highUrgencyCount }
             ].map(s => (
               <div key={s.label} className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <div className="text-lg font-black text-slate-800">{s.val}</div>
@@ -191,11 +190,15 @@ const App: React.FC = () => {
               </div>
             ))}
           </div>
+          <div className="p-4 bg-sky-50 rounded-2xl border border-sky-100">
+             <div className="text-xs font-black text-sky-600 uppercase mb-1 tracking-widest">Readiness Status</div>
+             <div className="text-sm font-bold text-slate-800">Standardized Medical Dialect Applied</div>
+          </div>
           <button 
             onClick={() => setScreen(Screen.DASHBOARD)}
             className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-800 transition-all"
           >
-            Acknowledge & Back
+            Finalize Shift Report
           </button>
         </div>
       </div>
